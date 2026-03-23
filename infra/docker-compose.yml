@@ -1,0 +1,42 @@
+version: '3.9'
+services:
+  mongo:
+    image: mongo:7
+    container_name: srrss-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  ai-service:
+    build:
+      context: ../ai-service
+    container_name: srrss-ai
+    ports:
+      - "8000:8000"
+    depends_on:
+      - mongo
+
+  backend:
+    build:
+      context: ../backend
+    container_name: srrss-backend
+    env_file:
+      - ../backend/.env
+    ports:
+      - "5000:5000"
+    depends_on:
+      - mongo
+      - ai-service
+
+  frontend:
+    build:
+      context: ../frontend
+    container_name: srrss-frontend
+    ports:
+      - "4173:80"
+    depends_on:
+      - backend
+
+volumes:
+  mongo_data:

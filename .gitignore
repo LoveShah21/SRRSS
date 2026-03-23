@@ -1,0 +1,7 @@
+node_modules/
+venv/
+.venv/
+.env
+desktop.ini
+Project Proposal.pdf
+SRS.pdf
