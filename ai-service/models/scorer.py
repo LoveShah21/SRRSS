@@ -136,22 +136,101 @@ def compute_skill_score(resume_text: str, jd_text: str) -> SkillMatchResult:
 # Phase 6 – Experience Matching
 # ──────────────────────────────────────────────────────────────────────────────
 
-# Patterns for extracting years of experience from text
+# Patterns for extracting required years from a JD
 _EXP_PATTERNS = [
-    # "5+ years", "3-5 years", "at least 2 years"
-    r"(\d+)\s*\+?\s*(?:to|-)\s*(\d+)\s*\+?\s*years?",   # range: 3-5 years
-    r"(\d+)\s*\+\s*years?",                               # 5+ years
-    r"(\d+)\s*years?\s*(?:of\s*)?(?:experience|exp\.?)",  # "3 years of experience"
+    r"(\d+)\s*\+?\s*(?:to|-)\s*(\d+)\s*\+?\s*years?",          # "3-5 years"
+    r"(\d+)\s*\+\s*years?",                                      # "5+ years"
+    r"(\d+)\s*years?\s*(?:of\s*)?(?:experience|exp\.?)",         # "3 years of experience"
     r"(?:minimum|at\s+least|minimum\s+of)\s+(\d+)\s*years?",
     r"experience\s*[:\-–]?\s*(\d+)\s*years?",
     r"(\d+)\s*years?\s*(?:in|with|using)",
 ]
 
-_RESUME_EXP_PATTERNS = [
-    r"(\d{4})\s*(?:–|-|to)\s*(\d{4}|present|current|now)",  # "2019 – 2022"
+# Explicit "X years of experience" patterns for resume (no date ranges here)
+_RESUME_EXPLICIT_EXP_PATTERNS = [
     r"(\d+)\+?\s*years?\s*(?:of\s*)?(?:experience|exp\.?)",
     r"(?:total|overall)\s+(?:experience|exp\.?)\s*[:\-]?\s*(\d+)",
 ]
+
+# ── Section classification regexes ────────────────────────────────────────────
+
+# Headers that mark a WORK EXPERIENCE section
+_WORK_SECTION_RE = re.compile(
+    r"^\s*(work\s*experience|professional\s*experience|employment(\s*history)?|"
+    r"experience|career(\s*history)?|work\s*history|job\s*history)\s*$",
+    re.IGNORECASE,
+)
+
+# Headers that mark sections we must SKIP (education, projects, skills, etc.)
+_NON_WORK_SECTION_RE = re.compile(
+    r"^\s*(education|academic|qualification|schooling|projects?|"
+    r"skills?|technical\s*skills?|coursework|certifications?|"
+    r"achievements?|activities|languages?|profile|summary|objective|"
+    r"position\s*of\s*responsibility|additional|volunteer|awards?|"
+    r"interests?|hobbies|publications?|references?|database|"
+    r"computer\s*languages?|note)\s*$",
+    re.IGNORECASE,
+)
+
+# Generic section header detector (short line, only alpha + spaces)
+_SECTION_HEADER_RE = re.compile(r"^\s*[A-Za-z][A-Za-z\s&/()]{2,45}\s*$")
+
+# Date range pattern: "2021 – 2023" or "Jan 2020 - Present"
+_DATE_RANGE_RE = re.compile(
+    r"(\d{4})\s*(?:–|—|-|to)\s*(\d{4}|present|current|now)",
+    re.IGNORECASE,
+)
+
+
+def _extract_work_section_text(resume_text: str) -> str | None:
+    """
+    Isolate only the lines that belong to a work/professional experience section.
+
+    Strategy:
+      - Walk lines top-to-bottom tracking the current section.
+      - A line is a section header if it matches _SECTION_HEADER_RE AND
+        is short (≤ 50 chars) AND has no digits.
+      - Collect lines only while inside a recognised work section.
+      - Stop collecting when we enter a new, non-work section.
+
+    Returns the collected text, or None if no work section was found.
+    """
+    lines = resume_text.split("\n")
+    in_work_section = False
+    work_lines: list[str] = []
+
+    for line in lines:
+        stripped = line.strip()
+
+        # Skip blank lines for header detection but keep them for content
+        if not stripped:
+            if in_work_section:
+                work_lines.append(line)
+            continue
+
+        is_header = (
+            _SECTION_HEADER_RE.match(stripped)
+            and len(stripped) <= 50
+            and not re.search(r"\d", stripped)   # headers don't contain digits
+        )
+
+        if is_header:
+            if _WORK_SECTION_RE.match(stripped):
+                in_work_section = True          # entered a work section
+                continue                        # skip the header itself
+            elif _NON_WORK_SECTION_RE.match(stripped):
+                in_work_section = False         # left work section
+                continue
+            else:
+                # Unknown section header → leave work section if we were in one
+                if in_work_section:
+                    in_work_section = False
+                continue
+
+        if in_work_section:
+            work_lines.append(line)
+
+    return "\n".join(work_lines) if work_lines else None
 
 
 def _extract_years_from_text(text: str, patterns: list[str]) -> float | None:
@@ -163,32 +242,22 @@ def _extract_years_from_text(text: str, patterns: list[str]) -> float | None:
         for match in re.finditer(pattern, text_lower):
             groups = [g for g in match.groups() if g and g.isdigit()]
             if groups:
-                # For ranges (e.g., "3-5 years"), take the minimum (JD requirement)
                 candidates.append(float(min(int(g) for g in groups)))
 
-    if not candidates:
-        return None
-
-    # Return the highest sensible value (< 40 years to filter noise)
     valid = [y for y in candidates if 0 < y < 40]
     return max(valid) if valid else None
 
 
-def _estimate_resume_years_from_dates(resume_text: str) -> float | None:
+def _years_from_date_ranges(text: str) -> float | None:
     """
-    Estimate total experience from date ranges in the resume.
-    e.g. "2019 – 2022", "Jan 2018 – Present"
+    Sum non-overlapping date ranges found in `text`.
+    Only call this on text already confirmed to be from a work section.
     """
     import datetime
-
     current_year = datetime.datetime.now().year
-    text_lower = resume_text.lower()
-
-    # Match year ranges: "2018 - 2021" or "2018 - present"
-    date_range_pattern = r"(\d{4})\s*(?:–|-|to)\s*(\d{4}|present|current|now)"
     ranges: list[tuple[int, int]] = []
 
-    for match in re.finditer(date_range_pattern, text_lower):
+    for match in _DATE_RANGE_RE.finditer(text.lower()):
         start_str, end_str = match.group(1), match.group(2)
         try:
             start = int(start_str)
@@ -201,7 +270,6 @@ def _estimate_resume_years_from_dates(resume_text: str) -> float | None:
     if not ranges:
         return None
 
-    # Merge overlapping ranges to avoid double-counting
     ranges.sort()
     merged: list[tuple[int, int]] = [ranges[0]]
     for start, end in ranges[1:]:
@@ -210,53 +278,73 @@ def _estimate_resume_years_from_dates(resume_text: str) -> float | None:
         else:
             merged.append((start, end))
 
-    total_years = sum(end - start for start, end in merged)
-    return float(total_years) if total_years > 0 else None
+    total = sum(end - start for start, end in merged)
+    return float(total) if total > 0 else None
 
 
 def compute_experience_score(resume_text: str, jd_text: str) -> ExperienceMatchResult:
     """
     Compare candidate experience against JD requirements.
 
-    Scoring logic:
-        - If JD requires N years and resume has >= N → score 1.0
-        - If resume has (N - 1) years                → score 0.8
-        - If resume has (N - 2) years                → score 0.5
-        - Below that                                 → score 0.2
-        - If no JD requirement found                 → neutral 0.7
+    Resume years detection priority:
+      1. Explicit "X years of experience" phrase anywhere in resume.
+      2. Date ranges found ONLY inside a work/employment section header.
+      3. If neither found → treat as fresher (0 years).
+
+    Scoring:
+        resume >= jd_required        → 1.0
+        gap == 1 year                → 0.8
+        gap == 2 years               → 0.5
+        gap > 2 years / fresher      → 0.2
+        no JD requirement            → 0.7 (neutral)
     """
     jd_years = _extract_years_from_text(jd_text, _EXP_PATTERNS)
-    resume_years = _extract_years_from_text(resume_text, _RESUME_EXP_PATTERNS)
 
-    # If explicit years not found in resume, try inferring from date ranges
+    # Priority 1: explicit "X years of experience" in resume
+    resume_years = _extract_years_from_text(resume_text, _RESUME_EXPLICIT_EXP_PATTERNS)
+
+    # Priority 2: date ranges ONLY from the work experience section
     if resume_years is None:
-        resume_years = _estimate_resume_years_from_dates(resume_text)
+        work_text = _extract_work_section_text(resume_text)
+        if work_text:
+            resume_years = _years_from_date_ranges(work_text)
+        # If work_text is None → no experience section found → fresher (resume_years stays None)
 
+    # ── No JD requirement ──────────────────────────────────────────────────
     if jd_years is None:
         return ExperienceMatchResult(
             jd_years_required=None,
-            resume_years_found=resume_years,
+            resume_years_found=resume_years if resume_years is not None else 0.0,
             experience_score=0.7,
-            note="No explicit experience requirement found in JD. Neutral score applied.",
+            note="No explicit experience requirement in JD. Neutral score applied.",
         )
 
-    if resume_years is None:
+    # ── Fresher / no experience found ─────────────────────────────────────
+    if resume_years is None or resume_years == 0.0:
         return ExperienceMatchResult(
             jd_years_required=jd_years,
-            resume_years_found=None,
-            experience_score=0.4,
-            note="Could not determine candidate's years of experience from resume.",
+            resume_years_found=0.0,
+            experience_score=0.2,
+            note=(
+                f"No professional work experience found in resume (fresher). "
+                f"JD requires {jd_years:.0f} yr(s)."
+            ),
         )
 
+    # ── Compare ────────────────────────────────────────────────────────────
     gap = jd_years - resume_years
     if gap <= 0:
-        score, note = 1.0, f"Meets requirement ({resume_years:.0f} ≥ {jd_years:.0f} yrs)."
+        score = 1.0
+        note = f"Meets requirement ({resume_years:.0f} ≥ {jd_years:.0f} yrs)."
     elif gap <= 1:
-        score, note = 0.8, f"Slightly below requirement ({resume_years:.0f}/{jd_years:.0f} yrs)."
+        score = 0.8
+        note = f"Slightly below requirement ({resume_years:.0f}/{jd_years:.0f} yrs)."
     elif gap <= 2:
-        score, note = 0.5, f"Below requirement by ~2 years ({resume_years:.0f}/{jd_years:.0f} yrs)."
+        score = 0.5
+        note = f"Below requirement by ~2 years ({resume_years:.0f}/{jd_years:.0f} yrs)."
     else:
-        score, note = 0.2, f"Significantly below requirement ({resume_years:.0f}/{jd_years:.0f} yrs)."
+        score = 0.2
+        note = f"Significantly below requirement ({resume_years:.0f}/{jd_years:.0f} yrs)."
 
     return ExperienceMatchResult(
         jd_years_required=jd_years,
