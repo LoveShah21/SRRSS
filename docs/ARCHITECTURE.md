@@ -1,91 +1,240 @@
-# Architecture & Technical Design (ARCHITECTURE.md)
+# SRRSS Architecture Documentation
 
-## 1. High-Level System Architecture
+## System Overview
 
-SRRSS uses a robust 3-Tier Microservices-inspired architecture designed to separate UI logic, business orchestration, and heavy AI workloads.
+The Smart Recruitment & Resume Screening System (SRRSS) is a full-stack web application that automates resume screening, candidate scoring, and bias detection in job postings.
 
-```text
-[ React Frontend ] (Candidate/Recruiter/Admin UIs)
-        │
-      (REST / JSON)
-        ▼
-[ Node.js API Gateway & Business Logic ] ─── (MongoDB Atlas) 
-  (Express.js, JWT, Mongoose Auth/RBAC) ─── (AWS S3 - Files)
-        │
-      (REST / internal RPC)
-        ▼
-[ Python AI Microservice ] (FastAPI, spaCy, scikit-learn)
+## Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         Frontend (React)                        │
+│                    http://localhost:5173                        │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌───────────┐ │
+│  │   Login     │ │  Dashboard  │ │  Job Board  │ │   Admin   │ │
+│  │   Register  │ │  My Apps    │ │  Job Detail │ │  Console  │ │
+│  └─────────────┘ └─────────────┘ └─────────────┘ └───────────┘ │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              │ HTTP/REST API
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Backend API (Node.js/Express)                │
+│                    http://localhost:5000                        │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │                     Routes                                │  │
+│  │  /api/auth    /api/jobs    /api/applications              │  │
+│  │  /api/resume  /api/admin                                  │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │                    Middleware                             │  │
+│  │  Authentication (JWT) │ Authorization (RBAC) │ Error       │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │                     Models                                │  │
+│  │  User │ Job │ Application                                │  │
+│  └───────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+         │                                    │
+         │                                    │ HTTP
+         │ MongoDB                            ▼
+         ▼                    ┌───────────────────────────────┐
+┌─────────────────┐           │    AI Service (Python/FastAPI)│
+│   MongoDB       │           │    http://localhost:8000      │
+│   Database      │           │                               │
+│                 │           │  - Resume Parser              │
+│                 │           │  - Candidate Scorer           │
+│                 │           │  - Bias Detector              │
+│                 │           └───────────────────────────────┘
+└─────────────────┘
 ```
 
-## 2. Component Responsibilities
+## Technology Stack
 
-### Tier 1: Frontend (React + Tailwind CSS)
-*   **Role:** User engagement and display. Separate logical routing flows for Candidate, Recruiter, and Admin.
-*   **State Management:** React Context API (or Redux for generic caching).
-*   **Hosting:** Vercel.
+### Frontend
+- **Framework**: React 18 with Vite
+- **Routing**: React Router DOM v6
+- **UI Components**: Lucide React icons
+- **HTTP Client**: Axios
+- **State Management**: React Context API
 
-### Tier 2: Backend API (Node.js + Express)
-*   **Role:** Primary data orchestrator. Handles User Auth, Role-Based Access Controls (RBAC), and simple CRUD operations (Jobs, Interveiws, Users). 
-*   **Data Layer:** Connects to MongoDB to store user profiles, job specs, and metadata. Connects to S3 to securely stream uploaded Resumes.
-*   **Hosting:** Docker container on Heroku / AWS ECS.
+### Backend
+- **Runtime**: Node.js 20
+- **Framework**: Express.js 5
+- **Database**: MongoDB with Mongoose ODM
+- **Authentication**: JWT (jsonwebtoken)
+- **Security**: Helmet, CORS, Rate Limiting
+- **File Upload**: Multer
 
-### Tier 3: AI Service (Python + FastAPI)
-*   **Role:** Performs heavy computation logic separated from the async event loop of Node.js. 
-*   **Key Pipes:** 
-    1.  *Resume Parsing Engine:* (spaCy) Extracts names, emails, skills, education.
-    2.  *Semantic Matcher:* Compares Job embeddings vs Resume embeddings (TF-IDF/cosine similarity). 
-    3.  *Bias Detector:* Checks Job descriptions for gendered/biased wording.
+### AI Service
+- **Framework**: FastAPI (Python)
+- **NLP**: NLTK, spaCy
+- **Resume Parsing**: pdfplumber, python-docx
+- **ML**: scikit-learn
 
-## 3. Polyrepo / Monorepo Folder Structure
+### DevOps
+- **Containerization**: Docker (multi-stage builds)
+- **Orchestration**: Docker Compose
+- **CI/CD**: GitHub Actions
 
-```text
-/
-├─ frontend/          # React (CRA or Vite) application
-├─ backend/           # Node.js Express server
-│  ├─ src/
-│  │  ├─ controllers/
-│  │  ├─ models/      # Mongoose schemas
-│  │  ├─ routes/
-│  │  ├─ services/    # Logic & AI proxy calls
-│  │  └─ middleware/  # JWT & RBAC
-├─ ai-service/        # Python FastAPI
-│  ├─ app/
-│  │  ├─ api/         # Endpoints
-│  │  ├─ nlp/         # spaCy logic / parsers
-│  │  └─ models/      # Scoring models
-├─ infra/             # Docker-compose, k8s, github actions
-└─ docs/              # Architecture, UX, API definitions
+## System Components
+
+### 1. Authentication Service
+- JWT-based authentication
+- Refresh token rotation
+- Role-based access control (RBAC)
+- Supported roles: candidate, recruiter, admin
+
+### 2. Job Management Service
+- CRUD operations for job postings
+- Text search with MongoDB indexes
+- Skills and location filtering
+- Bias detection integration
+
+### 3. Application Management Service
+- Application submission with AI scoring
+- Status workflow (applied → shortlisted → interview → hired/rejected)
+- Interview scheduling
+- Recruiter dashboard with sorting
+
+### 4. Resume Processing Service
+- File upload (PDF/DOCX)
+- AI-powered resume parsing
+- Profile auto-population
+- Skills extraction
+
+### 5. Admin Console
+- User management
+- Role assignment
+- System analytics
+- Content moderation
+
+## Database Schema
+
+### User Collection
+```javascript
+{
+  email: String (unique, lowercase, indexed),
+  passwordHash: String (bcrypt),
+  role: Enum['candidate', 'recruiter', 'admin'],
+  profile: {
+    firstName: String,
+    lastName: String,
+    phone: String,
+    linkedIn: String,
+    skills: [String],
+    education: [{degree, institution, year}],
+    experience: [{title, company, years, description}],
+    resumeUrl: String,
+    parsedAt: Date
+  },
+  refreshToken: String,
+  timestamps: true
+}
 ```
 
-## 4. Primary Data Models (MongoDB)
+### Job Collection
+```javascript
+{
+  title: String (indexed),
+  description: String,
+  requiredSkills: [String] (indexed),
+  experienceMin: Number,
+  experienceMax: Number,
+  location: String,
+  salaryRange: {min, max},
+  status: Enum['open', 'closed', 'draft'],
+  recruiterId: ObjectId (ref: User),
+  biasFlags: [{term, suggestion, severity}],
+  applicantCount: Number,
+  timestamps: true
+}
+```
 
-**User Collection**
-*   `_id`, `name`, `email`, `passwordHash`, `role` (Admin|Recruiter|Candidate), `createdAt`
-*   *Candidate Profile Embed:* `skills[]`, `experience[]`, `education[]`
+### Application Collection
+```javascript
+{
+  candidateId: ObjectId (ref: User, indexed),
+  jobId: ObjectId (ref: User, indexed),
+  matchScore: Number (0-100),
+  scoreBreakdown: {skills, experience, education},
+  status: Enum['applied', 'shortlisted', 'interview', 'hired', 'rejected'],
+  statusHistory: [{status, changedAt, changedBy}],
+  interview: {scheduledAt, link, notes},
+  appliedAt: Date,
+  timestamps: true
+}
+```
 
-**Job Collection**
-*   `_id`, `title`, `description`, `department`, `status` (Open|Closed), `createdBy` (User ID), `requiredSkills[]`
+## API Endpoints
 
-**Application Collection**
-*   `_id`, `jobId`, `candidateId`, `resumeUrl` (S3 link)
-*   `status` (Applied|Shortlisted|Interview|Hired|Rejected)
-*   `aiMatchScore` (0-100), `aiExtractedSkills[]`
+### Authentication
+- `POST /api/auth/register` - Register new user
+- `POST /api/auth/login` - Login
+- `POST /api/auth/refresh` - Refresh token
+- `POST /api/auth/logout` - Logout
+- `GET /api/auth/me` - Get current user
 
-**Audit Log Collection**
-*   `_id`, `action`, `userId`, `timestamp`, `details`
+### Jobs
+- `GET /api/jobs` - List jobs (with filters)
+- `GET /api/jobs/:id` - Get single job
+- `POST /api/jobs` - Create job (recruiter/admin)
+- `PUT /api/jobs/:id` - Update job (recruiter/admin)
+- `DELETE /api/jobs/:id` - Delete job (admin)
 
-## 5. Internal API Contracts
+### Applications
+- `POST /api/applications` - Apply to job (candidate)
+- `GET /api/applications/me` - Get candidate's applications
+- `GET /api/applications/job/:jobId` - Get job applications (recruiter)
+- `PATCH /api/applications/:id/status` - Update status (recruiter)
+- `PATCH /api/applications/:id/interview` - Schedule interview
 
-### Node.js <-> Frontend
-*   `POST /api/v1/auth/login` -> Returns JWT.
-*   `POST /api/v1/jobs` -> Recruiter creates Job.
-*   `POST /api/v1/applications` -> Candidate applies (multipart/form-data for Resume).
-*   `GET /api/v1/jobs/:id/candidates` -> Recruiter views ranked applicants.
+### Resume
+- `POST /api/resume/upload` - Upload resume (candidate)
+- `GET /api/resume/profile` - Get parsed profile
+- `PUT /api/resume/profile` - Update profile
 
-### Node.js <-> Python AI Service
-*   `POST /internal/ai/parse-resume` 
-    *   *Req:* PDF binary stream. 
-    *   *Res:* JSON `{ extracted: { name, skills, ... } }`.
-*   `POST /internal/ai/score-candidate`
-    *   *Req:* `{ jobText: "...", candidateSkills: [...] }`
-    *   *Res:* `{ matchScore: 85 }`
+### Admin
+- `GET /api/admin/users` - List all users
+- `PATCH /api/admin/users/:id/role` - Update role
+- `DELETE /api/admin/users/:id` - Delete user
+- `GET /api/admin/analytics` - System analytics
+
+## Security Measures
+
+1. **Authentication**: JWT with refresh token rotation
+2. **Authorization**: Role-based access control (RBAC)
+3. **Rate Limiting**: 100 requests per 15 minutes
+4. **CORS**: Configured for specific origins
+5. **Helmet**: Security headers
+6. **Input Validation**: Mongoose schema validation
+7. **Password Hashing**: bcrypt with salt
+8. **File Upload Validation**: MIME type checking
+
+## Scalability Considerations
+
+1. **Database Indexing**: Compound indexes for efficient queries
+2. **Pagination**: All list endpoints support pagination
+3. **Caching**: Ready for Redis integration
+4. **Horizontal Scaling**: Stateless API design
+5. **CDN**: Static assets served via nginx
+
+## Deployment Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│                  Docker Compose                      │
+│                                                      │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  │
+│  │  Frontend   │  │   Backend   │  │   AI Svc    │  │
+│  │  :5173      │  │   :5000     │  │   :8000     │  │
+│  └─────────────┘  └─────────────┘  └─────────────┘  │
+│         │                │                │         │
+│         └────────────────┴────────────────┘         │
+│                      │                              │
+│              ┌───────────────┐                      │
+│              │   MongoDB     │                      │
+│              │   :27017      │                      │
+│              └───────────────┘                      │
+└─────────────────────────────────────────────────────┘
+```
