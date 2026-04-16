@@ -49,13 +49,29 @@ export default function CandidatePortalPage() {
               <option value={job._id} key={job._id}>{job.title}</option>
             ))}
           </select>
-          <input
-            type="file"
-            accept=".pdf,.docx"
-            className="rounded-md border border-gray-300 px-3 py-2"
-            onChange={(event) => setSelectedFile(event.target.files?.[0] || null)}
-          />
-          <button className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">Apply Now</button>
+          <div className="flex w-full items-center overflow-hidden rounded-md border border-gray-300 bg-white">
+            <label className="cursor-pointer border-r border-gray-300 bg-gray-100 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 shrink-0">
+              Choose File
+              <input
+                type="file"
+                accept=".pdf,.docx"
+                className="hidden"
+                id="file-upload-input"
+                onChange={(event) => setSelectedFile(event.target.files?.[0] || null)}
+              />
+            </label>
+            <span className="flex-1 truncate px-3 text-sm text-gray-500">
+              {selectedFile ? selectedFile.name : 'No file chosen'}
+            </span>
+            <button 
+              type="button"
+              className="border-l border-gray-300 bg-gray-50 px-4 py-2 text-sm font-medium text-blue-600 hover:bg-blue-50 shrink-0"
+              onClick={() => document.getElementById('file-upload-input').click()}
+            >
+              Upload
+            </button>
+          </div>
+          <button type="submit" className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">Apply</button>
         </form>
         {message && <p className="mt-3 text-sm text-blue-700">{message}</p>}
       </section>
