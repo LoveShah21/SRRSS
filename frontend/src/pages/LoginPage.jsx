@@ -22,13 +22,20 @@ function LoginPage() {
   };
 
   return (
-    <section className="mx-auto max-w-md card">
-      <h1 className="text-2xl font-semibold">Login</h1>
-      <form onSubmit={onSubmit} className="mt-4 space-y-3">
-        <input className="w-full rounded-md border border-slate-300 px-3 py-2" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-        <input type="password" className="w-full rounded-md border border-slate-300 px-3 py-2" placeholder="Password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        <button className="w-full rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">Sign In</button>
+    <section className="mx-auto max-w-md card mt-12">
+      <h1 className="text-3xl font-black text-slate-900 dark:text-white">Welcome Back</h1>
+      <p className="mt-2 text-slate-600 dark:text-slate-400">Sign in to manage your recruitment journey.</p>
+      <form onSubmit={onSubmit} className="mt-8 space-y-4">
+        <div>
+          <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Email Address</label>
+          <input className="input-field mt-1" placeholder="email@example.com" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+        </div>
+        <div>
+          <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Password</label>
+          <input type="password" className="input-field mt-1" placeholder="••••••••" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+        </div>
+        {error && <p className="text-sm font-medium text-red-500">{error}</p>}
+        <button className="btn-primary w-full mt-4">Sign In</button>
       </form>
     </section>
   );
