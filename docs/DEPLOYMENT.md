@@ -48,16 +48,18 @@ npm run dev
 ### 3. AI Service Setup
 ```bash
 cd ai-service
+cp .env.example .env
 pip install -r requirements.txt
 
 # Start development server
-python -m uvicorn src.main:app --reload --port 8000
+python -m uvicorn app:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### 4. Frontend Setup
 ```bash
 cd frontend
 npm install
+cp .env.example .env
 
 # Start development server
 npm run dev
@@ -117,6 +119,8 @@ MONGODB_URI=mongodb://user:password@prod-db:27017/srrss
 JWT_SECRET=<generate-secure-random-string>
 JWT_REFRESH_SECRET=<generate-secure-random-string>
 AI_SERVICE_URL=http://ai-service:8000
+AI_SERVICE_API_KEY=<shared-ai-service-key>
+AI_TRUSTED_INTERNAL_HOSTS=localhost,127.0.0.1,::1,ai-service
 CLIENT_URL=https://your-domain.com
 ```
 
@@ -124,6 +128,11 @@ CLIENT_URL=https://your-domain.com
 ```env
 PORT=8000
 PYTHONUNBUFFERED=1
+AI_SERVICE_API_KEY=<shared-ai-service-key>
+AI_REQUIRE_API_KEY=true
+AI_ALLOWED_ORIGINS=https://your-domain.com
+REDIS_URL=redis://redis:6379/0
+SESSION_TTL_SECONDS=86400
 ```
 
 ### 1. Generate Secure Secrets
@@ -181,6 +190,8 @@ sudo certbot --nginx -d your-domain.com
 | JWT_REFRESH_SECRET | Refresh token secret | (required) |
 | JWT_REFRESH_EXPIRES_IN | Refresh token expiry | 7d |
 | AI_SERVICE_URL | AI service endpoint | http://localhost:8000 |
+| AI_SERVICE_API_KEY | Shared API key used for backend → AI service calls | (required in production) |
+| AI_TRUSTED_INTERNAL_HOSTS | Comma-separated internal hostnames explicitly trusted for backend → AI calls | localhost,127.0.0.1,::1,ai-service |
 | UPLOAD_DIR | Upload directory | ./uploads |
 | CLIENT_URL | Frontend URL(s) for CORS (comma-separated) | http://localhost:5173 |
 | LOG_LEVEL | Winston log level | info |
@@ -192,6 +203,16 @@ sudo certbot --nginx -d your-domain.com
 | SMTP_USER | SMTP auth username | (required if EMAIL_ENABLED) |
 | SMTP_PASS | SMTP auth password | (required if EMAIL_ENABLED) |
 | EMAIL_FROM | Sender email address | noreply@srrss.com |
+| R2_ACCOUNT_ID | Cloudflare account ID for R2 storage | (required for file uploads) |
+| R2_ACCESS_KEY_ID | R2 API access key | (required for file uploads) |
+| R2_SECRET_ACCESS_KEY | R2 API secret key | (required for file uploads) |
+| R2_BUCKET_NAME | R2 bucket name | srrss |
+| R2_ENDPOINT | R2 endpoint URL (auto-built from account ID if omitted) | https://{account_id}.r2.cloudflarestorage.com |
+| R2_PUBLIC_URL | Public URL for R2 bucket (if public access enabled) | (optional) |
+| CALENDAR_ENABLED | Enable Google Calendar sync for interviews | false |
+| GOOGLE_CLIENT_EMAIL | Google Service Account email | (required for calendar sync) |
+| GOOGLE_PRIVATE_KEY | Google Service Account private key (with \n for newlines) | (required for calendar sync) |
+| CALENDAR_ID | Google Calendar ID to use | primary |
 
 ### AI Service (.env)
 
@@ -199,6 +220,11 @@ sudo certbot --nginx -d your-domain.com
 |----------|-------------|---------|
 | PORT | Service port | 8000 |
 | PYTHONUNBUFFERED | Python output | 1 |
+| AI_SERVICE_API_KEY | API key required by secured AI endpoints | (required when `AI_REQUIRE_API_KEY=true`) |
+| AI_REQUIRE_API_KEY | Require API key auth for AI endpoints | true |
+| AI_ALLOWED_ORIGINS | Comma-separated allowed CORS origins | http://localhost:5173,http://localhost:4173 |
+| REDIS_URL | Redis connection string for durable multi-step session storage | redis://localhost:6379/0 |
+| SESSION_TTL_SECONDS | Session TTL for stored ranking workflow state | 86400 |
 
 ### Frontend (.env)
 

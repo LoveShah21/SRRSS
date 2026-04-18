@@ -266,6 +266,51 @@ Get all applications for a job.
 
 ---
 
+### POST /applications/job/:jobId/rank
+Re-rank all applications for a job using the AI scoring contract.
+
+**Required Role:** recruiter (own jobs), admin
+
+**Response (200):**
+```json
+{
+  "rankedApplications": [
+    {
+      "_id": "...",
+      "matchScore": 82,
+      "scoreBreakdown": { "skills": 35, "experience": 30, "education": 17 },
+      "aiExplanation": {
+        "matchedSkills": ["Node.js"],
+        "missingSkills": ["MongoDB"],
+        "experienceNote": "Relevant backend experience."
+      }
+    }
+  ]
+}
+```
+
+---
+
+### POST /applications/:id/reveal
+Reveal a candidate's identity in blind-screening mode (allowed after shortlist/interview/hired states).
+
+**Required Role:** recruiter (own jobs), admin
+
+**Response (200):**
+```json
+{
+  "message": "Candidate identity revealed.",
+  "application": {
+    "_id": "...",
+    "isIdentityRevealed": true,
+    "revealedAt": "2026-01-01T10:00:00.000Z",
+    "revealedBy": "..."
+  }
+}
+```
+
+---
+
 ### PATCH /applications/:id/status
 Update application status. Triggers email notification to candidate.
 
@@ -313,6 +358,21 @@ Upload and parse resume file. AI service auto-fills profile.
   "message": "Resume uploaded and parsed.",
   "parsed": { "skills": [...], "experience": [...], "education": [...] },
   "user": {...}
+}
+```
+
+---
+
+### GET /resume/download
+Generate a temporary pre-signed resume download URL for the authenticated user.
+
+**Required Role:** authenticated user
+
+**Response (200):**
+```json
+{
+  "url": "https://...",
+  "expiresIn": 3600
 }
 ```
 
@@ -384,10 +444,19 @@ Schedule a new interview with conflict detection.
     "scheduledAt": "2024-02-15T14:00:00Z",
     "duration": 60,
     "type": "video",
-    "status": "scheduled"
+    "status": "scheduled",
+    "calendarEventId": "google-calendar-event-id"
   }
 }
 ```
+
+**Calendar Integration:** When `CALENDAR_ENABLED=true` and Google Calendar credentials are configured, the system automatically:
+- Creates a Google Calendar event for the interview
+- Sends calendar invitations to both candidate and recruiter
+- Updates the event when the interview is rescheduled
+- Cancels the event when the interview is cancelled
+
+The `calendarEventId` field stores the Google Calendar event ID for sync tracking.
 
 **Status Codes:**
 - 201: Success
@@ -467,6 +536,41 @@ Recruiter candidate filter/search API.
 
 ---
 
+## Recruiter Endpoints *(NEW)*
+
+### GET /recruiter/analytics
+Get recruiter-specific hiring analytics.
+
+**Required Role:** recruiter, admin
+
+### GET /recruiter/settings
+Get recruiter UI settings.
+
+**Required Role:** recruiter, admin
+
+**Response (200):**
+```json
+{
+  "settings": {
+    "blindScreeningEnabled": true
+  }
+}
+```
+
+### PATCH /recruiter/settings
+Update recruiter UI settings.
+
+**Required Role:** recruiter, admin
+
+**Request Body:**
+```json
+{
+  "blindScreeningEnabled": true
+}
+```
+
+---
+
 ## Reports Endpoints *(NEW)*
 
 ### GET /reports/candidates
@@ -534,6 +638,13 @@ System-wide overview report.
   }
 }
 ```
+
+---
+
+### GET /reports/bi-metrics
+Admin BI metrics including time-to-hire, source quality, and conversion rates.
+
+**Required Role:** admin
 
 ---
 

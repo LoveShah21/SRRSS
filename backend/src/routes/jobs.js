@@ -1,0 +1,225 @@
+const express = require('express');
+const axios = require('axios');
+const Job = require('../models/Job');
+const { authenticate, authorize } = require('../middleware/auth');
+const { asyncHandler, AppError } = require('../middleware/errorHandler');
+const { escapeRegex } = require('../utils/security');
+const { isSafeExternalUrl, parseTrustedHosts } = require('../utils/urlValidator');
+const logger = require('../utils/logger');
+
+const router = express.Router();
+const AI_TRUSTED_INTERNAL_HOSTS = parseTrustedHosts(
+  process.env.AI_TRUSTED_INTERNAL_HOSTS || 'localhost,127.0.0.1,::1,ai-service',
+);
+
+/**
+ * GET /api/jobs — List all open jobs (with search/filter)
+ */
+router.get('/', authenticate, asyncHandler(async (req, res) => {
+  const { search, skills, location, status, page = 1, limit = 20 } = req.query;
+
+  const query = {};
+
+  // Default: show only open jobs for candidates
+  if (req.user.role === 'candidate') {
+    query.status = 'open';
+  } else if (status) {
+    query.status = status;
+  }
+
+  // Text search
+  if (search) {
+    const terms = String(search)
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((term) => escapeRegex(term));
+
+    if (terms.length > 0) {
+      query.$and = terms.map((term) => {
+        const safeRegex = { $regex: term, $options: 'i' };
+        return {
+          $or: [
+            { title: safeRegex },
+            { description: safeRegex },
+            { requiredSkills: safeRegex },
+            { location: safeRegex },
+          ],
+        };
+      });
+    }
+  }
+
+  // Filter by skills
+  if (skills) {
+    const skillList = skills.split(',').map((s) => s.trim());
+    query.requiredSkills = { $in: skillList };
+  }
+
+  // Filter by location
+  if (location) {
+    query.location = { $regex: location, $options: 'i' };
+  }
+
+  // Recruiter can only see their own jobs
+  if (req.user.role === 'recruiter') {
+    query.recruiterId = req.user._id;
+  }
+
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+  const [jobs, total] = await Promise.all([
+    Job.find(query)
+      .populate('recruiterId', 'profile.firstName profile.lastName email')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit)),
+    Job.countDocuments(query),
+  ]);
+
+  res.json({
+    jobs,
+    pagination: {
+      page: parseInt(page),
+      limit: parseInt(limit),
+      total,
+      pages: Math.ceil(total / parseInt(limit)),
+    },
+  });
+}));
+
+/**
+ * GET /api/jobs/:id — Get single job
+ */
+router.get('/:id', authenticate, asyncHandler(async (req, res) => {
+  const job = await Job.findById(req.params.id)
+    .populate('recruiterId', 'profile.firstName profile.lastName email');
+
+  if (!job) throw new AppError('Job not found.', 404);
+  res.json({ job });
+}));
+
+/**
+ * POST /api/jobs — Create a new job
+ */
+router.post('/', authenticate, authorize('recruiter', 'admin'), asyncHandler(async (req, res) => {
+  const { title, description, requiredSkills, experienceMin, experienceMax, location, salaryRange } = req.body;
+
+  if (!title || !description) {
+    throw new AppError('Title and description are required.', 400);
+  }
+
+  if (description.length > 10000) {
+    throw new AppError('Job description must not exceed 10,000 characters.', 400);
+  }
+
+  if (salaryRange) {
+    if (salaryRange.min < 0) {
+      throw new AppError('Minimum salary cannot be negative.', 400);
+    }
+    if (salaryRange.max < 0) {
+      throw new AppError('Maximum salary cannot be negative.', 400);
+    }
+    if (salaryRange.min > 0 && salaryRange.max > 0 && salaryRange.max < salaryRange.min) {
+      throw new AppError('Maximum salary must be greater than or equal to minimum salary.', 400);
+    }
+  }
+
+  const jobData = {
+    title,
+    description,
+    requiredSkills: requiredSkills || [],
+    experienceMin: experienceMin || 0,
+    experienceMax: experienceMax || 99,
+    location,
+    salaryRange,
+    recruiterId: req.user._id,
+  };
+
+  // Call AI bias detection (non-blocking, best effort)
+  try {
+    const aiUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+    const aiApiKey = process.env.AI_SERVICE_API_KEY;
+    const isSafe = await isSafeExternalUrl(aiUrl, { allowInternalHosts: AI_TRUSTED_INTERNAL_HOSTS });
+    if (isSafe && aiApiKey) {
+      const biasResult = await axios.post(`${aiUrl}/api/detect-bias`, {
+        job_description: description,
+      }, {
+        timeout: 3000,
+        headers: {
+          'X-API-KEY': aiApiKey,
+        },
+      });
+      if (biasResult.data?.biasFlags?.length > 0) {
+        jobData.biasFlags = biasResult.data.biasFlags;
+      }
+    } else if (!isSafe) {
+      logger.warn('AI service URL blocked — potential SSRF target', { url: aiUrl });
+    } else {
+      logger.warn('AI_SERVICE_API_KEY missing — skipping bias detection on job create.');
+    }
+  } catch (err) {
+    // AI service unavailable — continue without bias check
+    logger.warn('Bias detection failed on job create', { error: err.message });
+  }
+
+  const job = await Job.create(jobData);
+  res.status(201).json({ message: 'Job created successfully.', job });
+}));
+
+/**
+ * PUT /api/jobs/:id — Update a job
+ */
+router.put('/:id', authenticate, authorize('recruiter', 'admin'), asyncHandler(async (req, res) => {
+  const job = await Job.findById(req.params.id);
+  if (!job) throw new AppError('Job not found.', 404);
+
+  // Recruiters can only update their own jobs
+  if (req.user.role === 'recruiter' && job.recruiterId.toString() !== req.user._id.toString()) {
+    throw new AppError('You can only edit your own job postings.', 403);
+  }
+
+  const allowedFields = ['title', 'description', 'requiredSkills', 'experienceMin', 'experienceMax', 'location', 'salaryRange', 'status'];
+  allowedFields.forEach((field) => {
+    if (req.body[field] !== undefined) job[field] = req.body[field];
+  });
+
+  // Re-run bias detection if description changed
+  if (req.body.description !== undefined) {
+    try {
+      const aiUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+      const aiApiKey = process.env.AI_SERVICE_API_KEY;
+      const isSafe = await isSafeExternalUrl(aiUrl, { allowInternalHosts: AI_TRUSTED_INTERNAL_HOSTS });
+      if (isSafe && aiApiKey) {
+        const biasResult = await axios.post(`${aiUrl}/api/detect-bias`, {
+          job_description: req.body.description,
+        }, {
+          timeout: 3000,
+          headers: {
+            'X-API-KEY': aiApiKey,
+          },
+        });
+        job.biasFlags = biasResult.data?.biasFlags || [];
+      } else if (!isSafe) {
+        logger.warn('AI service URL blocked — potential SSRF target', { url: aiUrl });
+      } else {
+        logger.warn('AI_SERVICE_API_KEY missing — skipping bias detection on job update.');
+      }
+    } catch (err) {
+      logger.warn('Bias detection failed on job update', { error: err.message });
+    }
+  }
+
+  await job.save();
+  res.json({ message: 'Job updated.', job });
+}));
+
+/**
+ * DELETE /api/jobs/:id — Delete a job (Admin only)
+ */
+router.delete('/:id', authenticate, authorize('admin'), asyncHandler(async (req, res) => {
+  const job = await Job.findByIdAndDelete(req.params.id);
+  if (!job) throw new AppError('Job not found.', 404);
+  res.json({ message: 'Job deleted.' });
+}));
+
+module.exports = router;

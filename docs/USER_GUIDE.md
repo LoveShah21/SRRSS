@@ -70,7 +70,7 @@
 ### Tracking Applications
 
 1. Navigate to "My Applications"
-2. View all submitted applications
+2. View all your applications
 3. Check status for each application:
    - **Applied**: Submission received
    - **Shortlisted**: Under review
@@ -79,6 +79,16 @@
    - **Rejected**: Not selected
 4. View interview details if scheduled
 5. Click on job title to view job details
+
+### Viewing Scheduled Interviews
+
+1. Navigate to **"My Interviews"** from the navigation menu
+2. View all upcoming interviews with:
+   - Job title and interview type
+   - Date, time, and duration
+   - Meeting link (click to join)
+   - Any preparation notes from the recruiter
+3. When Google Calendar integration is enabled, interview events are automatically added to your calendar
 
 ### Profile Management
 
@@ -157,6 +167,8 @@
    - Check for scheduling conflicts automatically
    - Update the application status to "Interview"
    - Send an email notification to the candidate
+   - Create a Google Calendar event (if calendar integration is enabled)
+   - Send calendar invitations to candidate and recruiter
 
 > ⚠️ **Conflict Detection**: If the recruiter or candidate already has an interview at the selected time, the system will warn you.
 
@@ -167,7 +179,7 @@
    - Candidate name and job title
    - Date/time and duration
    - Interview type and meeting link
-   - Current status (scheduled, completed, cancelled)
+   - Current status (scheduled, rescheduled, completed, cancelled)
 3. Actions:
    - **Cancel**: Remove a scheduled interview
    - Update notes or reschedule via edit
@@ -175,17 +187,19 @@
 ### Candidate Search & Filter
 
 1. Navigate to **"Candidates"** in the top menu
-2. Use filters to find candidates:
+2. (Optional) Enable **Blind Screening** from recruiter settings to anonymize candidate identity during initial review
+3. Use filters to find candidates:
    - **Job**: Filter by specific job posting
    - **Skills**: Enter skills (comma-separated)
    - **Min Score**: Set minimum match score threshold
    - **Status**: Filter by application status
    - **Search**: Find by candidate name or email
-3. Click **"🔍 Search"** to apply filters
-4. View candidate cards with:
+4. Click **"🔍 Search"** to apply filters
+5. View candidate cards with:
    - Name, email, and skills
    - Match score (color-coded: green ≥70, amber ≥40, red <40)
    - Current application status
+   - AI explanation highlights (matched/missing skills and experience note)
 
 ### Reports & Export
 

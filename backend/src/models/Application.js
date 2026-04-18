@@ -1,31 +1,79 @@
 const mongoose = require('mongoose');
 
-const applicationSchema = new mongoose.Schema({
-  jobId: { type: mongoose.Schema.Types.ObjectId, ref: 'Job', required: true },
-  candidateId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  resumeUrl: { type: String, required: true }, // S3 path or local path if development
-  status: { 
-    type: String, 
-    enum: ['Applied', 'Shortlisted', 'Interview', 'Hired', 'Rejected'], 
-    default: 'Applied' 
+const statusHistorySchema = new mongoose.Schema({
+  status: {
+    type: String,
+    enum: ['applied', 'shortlisted', 'interview', 'hired', 'rejected'],
+    required: true,
   },
-  aiMatchScore: { type: Number },
-  aiExtractedData: {
-    name: { type: String },
-    email: { type: String },
-    skills: [{ type: String }],
-    education: [{ type: String }],
-    experience: [{ type: String }]
-  },
-  interviewSchedule: {
-    scheduledAt: { type: Date },
-    mode: { type: String, enum: ['Online', 'Onsite'], default: 'Online' },
-    notes: { type: String, default: '' },
-  }
-}, { timestamps: true });
+  changedAt: { type: Date, default: Date.now },
+  changedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+}, { _id: false });
 
-applicationSchema.index({ jobId: 1, aiMatchScore: -1 });
-applicationSchema.index({ candidateId: 1, createdAt: -1 });
-applicationSchema.index({ status: 1 });
+const applicationSchema = new mongoose.Schema({
+  candidateId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+    index: true,
+  },
+  jobId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Job',
+    required: true,
+    index: true,
+  },
+  matchScore: {
+    type: Number,
+    default: 0,
+    min: 0,
+    max: 100,
+  },
+  scoreBreakdown: {
+    skills: { type: Number, default: 0 },
+    experience: { type: Number, default: 0 },
+    education: { type: Number, default: 0 },
+  },
+  aiExplanation: {
+    matchedSkills: { type: [String], default: [] },
+    missingSkills: { type: [String], default: [] },
+    experienceNote: { type: String, default: '' },
+  },
+  status: {
+    type: String,
+    enum: ['applied', 'shortlisted', 'interview', 'hired', 'rejected'],
+    default: 'applied',
+    index: true,
+  },
+  statusHistory: {
+    type: [statusHistorySchema],
+    default: function () {
+      return [{ status: 'applied', changedAt: new Date() }];
+    },
+  },
+  interview: {
+    scheduledAt: Date,
+    link: String,
+    notes: String,
+  },
+  isIdentityRevealed: {
+    type: Boolean,
+    default: false,
+  },
+  revealedAt: Date,
+  revealedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  },
+  appliedAt: { type: Date, default: Date.now },
+}, {
+  timestamps: true,
+});
+
+// Prevent duplicate applications
+applicationSchema.index({ candidateId: 1, jobId: 1 }, { unique: true });
+
+// For recruiter sorted views
+applicationSchema.index({ jobId: 1, matchScore: -1 });
 
 module.exports = mongoose.model('Application', applicationSchema);
