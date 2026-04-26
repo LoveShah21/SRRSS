@@ -4,7 +4,7 @@ const connectDB = async () => {
   try {
     const explicitTls = process.env.MONGODB_TLS;
     const shouldUseTls = explicitTls != null
-      ? explicitTls === 'true'
+      ? explicitTls.toLowerCase() === 'true'
       : process.env.NODE_ENV === 'production';
 
     const conn = await mongoose.connect(process.env.MONGODB_URI, {

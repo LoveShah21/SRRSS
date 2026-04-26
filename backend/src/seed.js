@@ -27,7 +27,15 @@ const ROLES = ['Software Engineer', 'Data Scientist', 'Frontend Developer', 'Bac
  */
 const connectDB = async () => {
   try {
-    const conn = await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/srrss');
+    const explicitTls = process.env.MONGODB_TLS;
+    const shouldUseTls = explicitTls != null
+      ? explicitTls.toLowerCase() === 'true'
+      : process.env.NODE_ENV === 'production';
+
+    const conn = await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/srrss', {
+      dbName: process.env.DB_NAME || 'srrss',
+      tls: shouldUseTls,
+    });
     console.log(`MongoDB Connected: ${conn.connection.host}`);
   } catch (error) {
     console.error(`Error: ${error.message}`);
