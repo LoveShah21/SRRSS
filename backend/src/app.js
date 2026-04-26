@@ -22,6 +22,9 @@ const { getAllowedClientOrigins } = require('./utils/urlConfig');
 
 const app = express();
 
+// Trust proxy required for express-rate-limit when behind a load balancer (Render)
+app.set('trust proxy', 1);
+
 // ─── Security ────────────────────────────────────────────
 app.use(helmet({
   contentSecurityPolicy: {
