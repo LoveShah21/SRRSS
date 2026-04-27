@@ -100,13 +100,21 @@ cp .env.example .env
 npm run dev
 ```
 
+## Live Deployment
+
+The platform is deployed live with a decoupled architecture:
+- **Main Web Application (Render):** https://srrss.onrender.com
+- **AI Microservice (Hugging Face Spaces):** https://huggingface.co/spaces/LoveShah/srrss-ai-service
+
 ## Documentation
 
 - [Architecture](./docs/ARCHITECTURE.md) - System design and components
 - [API Documentation](./docs/API_DOCS.md) - REST API reference
 - [Deployment Guide](./docs/DEPLOYMENT.md) - Production deployment
+- [Render Deployment Guide](./docs/RENDER_DEPLOYMENT.md) - Render-specific deployment instructions
 - [User Guide](./docs/USER_GUIDE.md) - End-user documentation
 - [Readiness Review](./docs/CODEBASE_REVIEW_AND_READINESS.md) - Implementation checklist and status
+- [Future Enhancements](./docs/FUTURE_ENHANCEMENTS.md) - Planned features and roadmap
 
 ## Running Tests
 
