@@ -1,8 +1,24 @@
+function normalizeClientOrigin(origin) {
+  return String(origin || '')
+    .trim()
+    .replace(/^['"]+|['"]+$/g, '')
+    .replace(/\/+$/, '');
+}
+
 function getAllowedClientOrigins() {
-  return (process.env.CLIENT_URL || process.env.FRONTEND_URL || 'http://localhost:5173')
-    .split(',')
-    .map((origin) => origin.trim())
+  const rawOrigins = [process.env.CLIENT_URL, process.env.FRONTEND_URL]
+    .filter(Boolean)
+    .flatMap((value) => String(value).split(','));
+
+  const origins = rawOrigins
+    .map((origin) => normalizeClientOrigin(origin))
     .filter(Boolean);
+
+  if (origins.length > 0) {
+    return Array.from(new Set(origins));
+  }
+
+  return ['http://localhost:5173'];
 }
 
 function getPrimaryClientUrl() {
@@ -12,4 +28,5 @@ function getPrimaryClientUrl() {
 module.exports = {
   getAllowedClientOrigins,
   getPrimaryClientUrl,
+  normalizeClientOrigin,
 };

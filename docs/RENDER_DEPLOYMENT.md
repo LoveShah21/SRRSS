@@ -48,8 +48,8 @@ Hugging Face provides free Docker Spaces which are perfect for our AI Service.
 ### Required Variables:
 - `MONGODB_URI`: Your MongoDB Atlas connection string.
 - `MONGODB_TLS`: `true`
-- `CLIENT_URL`: The public URL of your Render app (e.g., `https://srrss.onrender.com`).
-- `FRONTEND_URL`: Same as `CLIENT_URL`.
+- `CLIENT_URL`: The public URL(s) allowed to call the backend. Use a comma-separated list with no extra quotes, for example `https://srrss.codes,https://www.srrss.codes,https://srrss-z5yz.onrender.com`.
+- `FRONTEND_URL`: Optional fallback list for the same allowed origins. If you set it, use the same comma-separated format and no quotes.
 - `AI_SERVICE_URL`: The Hugging Face Space URL you copied earlier (e.g., `https://<your-username>-srrss-ai-service.hf.space`).
 - `AI_SERVICE_API_KEY`: The EXACT same secret key you added to Hugging Face.
 
@@ -79,3 +79,4 @@ Once the service is live:
 - **App crashes on startup**: Check if your `MONGODB_URI` is correct and if `0.0.0.0/0` is whitelisted in Atlas.
 - **AI processing fails**: Make sure `AI_SERVICE_URL` and `AI_SERVICE_API_KEY` exactly match your Hugging Face deployment.
 - **Files not uploading**: Verify your Cloudflare R2 credentials.
+- **CORS blocks frontend assets**: Make sure the Render public URL is included in `CLIENT_URL` or `FRONTEND_URL`, and do not wrap the values in quotes.
